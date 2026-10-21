@@ -1,0 +1,64 @@
+name: Vigilante de citas
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vigilante
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recuperar estado anterior
+        run: |
+          if git ls-remote --exit-code --heads origin estado >/dev/null 2>&1; then
+            git fetch origin estado
+            git show origin/estado:estado.json > estado.json || rm -f estado.json
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          pip install playwright requests
+          playwright install --with-deps chromium
+
+      - name: Ejecutar vigilante
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python vigilante.py
+
+      - name: Guardar estado en la rama estado
+        if: always()
+        run: |
+          if [ -f estado.json ]; then
+            cp estado.json /tmp/estado.json
+            git config user.name "vigilante-bot"
+            git config user.email "vigilante-bot@users.noreply.github.com"
+            if git ls-remote --exit-code --heads origin estado >/dev/null 2>&1; then
+              git fetch origin estado
+              git checkout -f -B estado origin/estado
+            else
+              git checkout --orphan estado
+              git rm -rfq .
+            fi
+            cp /tmp/estado.json estado.json
+            git add estado.json
+            if ! git diff --cached --quiet; then
+              git commit -m "estado $(date -u +%F_%H:%M)"
+              git push origin estado
+            fi
+          fi
