@@ -1,8 +1,10 @@
 {
   "disponibles": {
     "Abril 2027": [
-      15
+      18,
+      20,
+      22
     ]
   },
-  "fallos": 2
+  "fallos": 0
 }
